@@ -1,4 +1,3 @@
-
 # To compile and run with a lab solution, set the lab name in lab.mk
 # (e.g., LAB=util).  Run make grade to test solution with the lab's
 # grade script (e.g., grade-lab-util).
@@ -67,7 +66,7 @@ endif
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
-#TOOLPREFIX = 
+TOOLPREFIX = riscv64-linux-gnu-
 
 # Try to infer the correct TOOLPREFIX if not set
 ifndef TOOLPREFIX
@@ -199,6 +198,8 @@ UPROGS=\
 	$U/_find\
 	$U/_xargs\
 	$U/_uptime\
+	$U/_trace\
+	$U/_sysinfotest\
 
 
 

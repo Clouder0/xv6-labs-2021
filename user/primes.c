@@ -1,6 +1,7 @@
 #include "kernel/types.h"
 #include "user/user.h"
 
+__attribute__((noreturn))
 void handle(int IN) {
   uint8 prime;
   if (read(IN, &prime, sizeof(prime)) <= 0) {
