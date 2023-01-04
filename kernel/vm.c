@@ -442,7 +442,7 @@ void vmprint_walk(pagetable_t pagetable, int depth){
       continue;
     for (int i = 0; i < depth; ++i)
       printf(".. ");
-    printf("..%d: pte %p pa %p\n", i, pte, pagetable);
+    printf("..%d: pte %p pa %p\n", i, pte, PTE2PA(pte));
     if ((pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X)) == 0)
     {
       uint64 child = PTE2PA(pte);
