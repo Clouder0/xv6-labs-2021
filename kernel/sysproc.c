@@ -77,11 +77,30 @@ sys_sleep(void)
 
 
 #ifdef LAB_PGTBL
-int
-sys_pgaccess(void)
+uint64 sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
-  return 0;
+  uint64 va, pres;
+  int num;
+  if (argaddr(0, &va) < 0)
+    return -1;
+  if (argint(1, &num) < 0)
+    return -1;
+  if (num > 64)
+    return -1;
+  if (argaddr(2, &pres) < 0)
+    return -1;
+  uint64 mask = 0;
+  for (int i = 0; i < num; ++i)
+  {
+    pte_t *pte = walk(myproc()->pagetable, va, 0);
+    if (*pte & PTE_A)
+    {
+      mask |= 1 << i;
+      *pte &= ~PTE_A; // clear access bit
+    }
+    va += PGSIZE;
+  }
+  return copyout(myproc()->pagetable, pres, (char*)&mask, sizeof(mask));
 }
 #endif
 
