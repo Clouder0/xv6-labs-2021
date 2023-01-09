@@ -6,11 +6,11 @@
 // versions of these tests.
 //
 
-#include "kernel/param.h"
 #include "kernel/types.h"
+#include "user/user.h"
+#include "kernel/param.h"
 #include "kernel/stat.h"
 #include "kernel/riscv.h"
-#include "user/user.h"
 
 void test0();
 void test1();

@@ -78,7 +78,24 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
+  {
+    if(p->interval > 0 && p->handling == 0)
+    {
+      ++p->passed_tick;
+      if (p->passed_tick >= p->interval)
+      {
+        // save the current status of the process
+        // then execute the alarm handler
+        if((p->alarmframe = (struct trampframe *)kalloc()) == 0)
+          panic("allocate alarmframe failed.");
+        memmove(p->alarmframe, p->trapframe, sizeof(struct trapframe));
+        p->trapframe->epc = (uint64)p->handler;
+        p->handling = 1;
+        p->passed_tick = 0;
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
