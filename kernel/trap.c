@@ -29,6 +29,7 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -49,8 +50,10 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
+
+  int cause = r_scause();
   
-  if(r_scause() == 8){
+  if(cause == 8){
     // system call
 
     if(p->killed)
@@ -67,8 +70,29 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(cause == 15) {
+    // Store page fault
+    uint64 va = r_stval();
+    if(va >= MAXVA)
+    {
+      printf("usertrap(): va >= MAXVA\n");
+      goto err;
+    }
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte && (*pte & PTE_C))
+    {
+      // COW
+      if (copy_on_write(pte) < 0)
+        goto err;
+    }
+    else {
+      // not COW
+      printf("not cow\n");
+      goto err;
+    }
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+  err:
+    printf("usertrap(): unexpected scause %d pid=%d\n", cause, p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }

@@ -81,7 +81,10 @@ pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
   if(va >= MAXVA)
-    panic("walk");
+  {
+    printf("walk invalid va %p\n", va);
+    return 0;
+  }
 
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
@@ -327,6 +330,42 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   return -1;
 }
 
+// Copy page table, but do not copy physical memory
+// Set PTE_C and PTE_W
+int
+uvmcopy_fork(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    if(*pte & PTE_W)
+    {
+      *pte |= PTE_C;
+      *pte &= ~PTE_W;
+    }
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    ref_acquire();
+    ref_incre(pa);
+    ref_release();
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+
+
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
 void
@@ -340,6 +379,45 @@ uvmclear(pagetable_t pagetable, uint64 va)
   *pte &= ~PTE_U;
 }
 
+int copy_on_write(pte_t *pte)
+{
+  uint64 pa = PTE2PA(*pte);
+  ref_acquire();
+  uint64 ref = ref_get(pa);
+  if (ref > 1)
+  {
+    void *mem = kalloc();
+    if (!mem)
+    {
+      printf("usertrap(): out of memory\n");
+      ref_release();
+      return -1;
+    }
+    memmove(mem, (const void *)pa, PGSIZE);
+    int flags = PTE_FLAGS(*pte);
+    flags &= (~PTE_C);
+    flags |= PTE_W;
+    *pte = PA2PTE(mem) | flags;
+    ref_decre(pa);
+    ref_release();
+  }
+  else if (ref == 1)
+  {
+    // ref == 1, set as normal
+    *pte |= PTE_W;
+    *pte &= ~PTE_C;
+    ref_release();
+  }
+  else
+  {
+    printf("COW ref count error! ref = %d\n", ref);
+    ref_release();
+    return -1;
+  }
+  return 0;
+}
+
+
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
@@ -350,8 +428,16 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
-    if(pa0 == 0)
+    pte_t *pte = walk(pagetable, va0, 0);
+    if (!pte)
+      return -1;
+    if (*pte & PTE_C)
+    {
+      if(copy_on_write(pte) < 0)
+        return -1;
+    }
+    pa0 = PTE2PA(*pte);
+    if (pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
     if(n > len)
@@ -364,6 +450,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   }
   return 0;
 }
+
 
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
