@@ -12,8 +12,10 @@ struct entry {
   int key;
   int value;
   struct entry *next;
+  pthread_mutex_t lock;
 };
 struct entry *table[NBUCKET];
+pthread_mutex_t table_lock[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
 
@@ -27,13 +29,18 @@ now()
 }
 
 static void 
-insert(int key, int value, struct entry **p, struct entry *n)
+insert(int key, int value, int num)
 {
   struct entry *e = malloc(sizeof(struct entry));
   e->key = key;
   e->value = value;
+  pthread_mutex_init(&e->lock, NULL);
+  pthread_mutex_lock(&table_lock[num]);
+  struct entry **p = &table[num];
+  struct entry *n = table[num];
   e->next = n;
   *p = e;
+  pthread_mutex_unlock(&table_lock[num]);
 }
 
 static 
@@ -43,18 +50,33 @@ void put(int key, int value)
 
   // is the key already present?
   struct entry *e = 0;
-  for (e = table[i]; e != 0; e = e->next) {
+  pthread_mutex_lock(&table_lock[i]);
+  e = table[i];
+  pthread_mutex_unlock(&table_lock[i]);
+  while(e != 0)
+  {
+    pthread_mutex_t *l = &e->lock;
+    pthread_mutex_lock(l);
     if (e->key == key)
+    {
+      pthread_mutex_unlock(&e->lock);
       break;
+    }
+    e = e->next;
+    pthread_mutex_unlock(l);
   }
-  if(e){
+  if (e)
+  {
     // update the existing key.
+    pthread_mutex_lock(&e->lock);
     e->value = value;
-  } else {
-    // the new is new.
-    insert(key, value, &table[i], table[i]);
+    pthread_mutex_unlock(&e->lock);
   }
-
+  else
+  {
+    // the new is new.
+    insert(key, value, i);
+  }
 }
 
 static struct entry*
@@ -62,10 +84,17 @@ get(int key)
 {
   int i = key % NBUCKET;
 
-
   struct entry *e = 0;
-  for (e = table[i]; e != 0; e = e->next) {
-    if (e->key == key) break;
+  pthread_mutex_lock(&table_lock[i]);
+  e = table[i];
+  pthread_mutex_unlock(&table_lock[i]);
+  while(e) {
+    if (e->key == key)
+      break;
+    pthread_mutex_t *l = &e->lock;
+    pthread_mutex_lock(l);
+    e = e->next;
+    pthread_mutex_unlock(l);
   }
 
   return e;
@@ -101,10 +130,11 @@ get_thread(void *xa)
 int
 main(int argc, char *argv[])
 {
+  for (int i = 0; i < NBUCKET; ++i)
+    pthread_mutex_init(&table_lock[i], NULL);
   pthread_t *tha;
   void *value;
   double t1, t0;
-
 
   if (argc < 2) {
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);
@@ -132,7 +162,6 @@ main(int argc, char *argv[])
 
   printf("%d puts, %.3f seconds, %.0f puts/second\n",
          NKEYS, t1 - t0, NKEYS / (t1 - t0));
-
   //
   // now the gets
   //
@@ -147,4 +176,5 @@ main(int argc, char *argv[])
 
   printf("%d gets, %.3f seconds, %.0f gets/second\n",
          NKEYS*nthread, t1 - t0, (NKEYS*nthread) / (t1 - t0));
+  return 0;
 }
