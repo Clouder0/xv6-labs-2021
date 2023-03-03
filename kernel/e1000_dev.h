@@ -99,13 +99,13 @@
 // [E1000 3.3.3]
 struct tx_desc
 {
-  uint64 addr;
-  uint16 length;
-  uint8 cso;
-  uint8 cmd;
-  uint8 status;
-  uint8 css;
-  uint16 special;
+  uint64 addr;   // buffer address
+  uint16 length; // length of data
+  uint8 cso;     // checksum offset
+  uint8 cmd;     // command field
+  uint8 status;  // status field
+  uint8 css;      // checksum start field
+  uint16 special; // special field
 };
 
 /* Receive Descriptor bit definitions [E1000 3.2.3.1] */
